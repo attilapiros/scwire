@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Spark Connect – LoggingInterceptor trace</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #000; color: #00ff41; }
+  h1 { font-size: 1.1rem; padding: 1rem 1.5rem 0.5rem; margin: 0; color: #00ff41; }
+  .subtitle { font-size: 0.8rem; color: #00aa2a; padding: 0 1.5rem 1rem; word-break: break-all; }
+  .toolbar { display: flex; gap: 1rem; align-items: center; padding: 0.5rem 1.5rem;
+              background: #0a0a0a; border-bottom: 1px solid #00ff41; flex-wrap: wrap; }
+  .toolbar label { font-size: 0.85rem; color: #00ff41; }
+  select, button { font-size: 0.85rem; padding: 0.3rem 0.6rem; border-radius: 4px;
+                    border: 1px solid #00ff41; background: #000; color: #00ff41; cursor: pointer; }
+  button:hover { background: #003010; }
+  button:disabled { opacity: 0.3; cursor: default; }
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #00ff41; padding: 0 1.5rem;
+           background: #0a0a0a; }
+  .tab { padding: 0.6rem 1.2rem; cursor: pointer; font-size: 0.9rem; color: #00aa2a;
+          border-bottom: 3px solid transparent; margin-bottom: -2px; }
+  .tab.active { border-bottom-color: #00ff41; font-weight: 600; color: #00ff41; }
+  .panel { display: none; padding: 1.5rem; }
+  .panel.active { display: block; }
+  #diagram-panel { overflow-x: auto; }
+  .mermaid-page { background: #0a0a0a; padding: 1rem; border-radius: 8px;
+                   border: 1px solid #00ff41; display: inline-block; min-width: 100%; margin-bottom: 1rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.83rem; background: #0a0a0a;
+           border-radius: 8px; overflow: hidden; border: 1px solid #00ff41; }
+  th { background: #003010; color: #00ff41; padding: 0.5rem 0.8rem; text-align: left;
+        border-bottom: 1px solid #00ff41; }
+  td { padding: 0.4rem 0.8rem; border-bottom: 1px solid #001a08; vertical-align: top; color: #00ff41; }
+  tr:hover td { background: #001a08; }
+  .dir-req { color: #00ccff; font-weight: 600; }
+  .dir-res { color: #00ff41; font-weight: 600; }
+  .op-badge { font-size: 0.75rem; background: #003010; color: #00ff41;
+               padding: 1px 5px; border-radius: 10px; font-family: monospace;
+               border: 1px solid #00aa2a; }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 0.78rem;
+         max-height: 200px; overflow-y: auto; background: #000; color: #00ff41; padding: 0.4rem;
+         border-radius: 4px; border: 1px solid #002a10; }
+  .pagination { display: flex; gap: 0.5rem; align-items: center; margin: 1rem 0;
+                 flex-wrap: wrap; }
+  .pagination span { font-size: 0.85rem; color: #00aa2a; }
+  .page-btn { min-width: 2rem; text-align: center; }
+  .page-btn.active { background: #003010; border-color: #00ff41; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Spark Connect – LoggingInterceptor trace</h1>
+<div class="subtitle">@@LOG_PATH@@</div>
+
+<div class="toolbar">
+  <label>Filter by operation:
+    <select id="op-filter">
+      <option value="">All operations</option>
+      @@FILTER_OPTIONS@@
+    </select>
+  </label>
+  <label>Page size:
+    <select id="page-size">
+      <option value="20">20</option>
+      <option value="50" selected>50</option>
+      <option value="100">100</option>
+      <option value="200">200</option>
+    </select>
+  </label>
+  <button onclick="resetFilter()">Reset</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('diagram')">Sequence Diagram</div>
+  <div class="tab" onclick="switchTab('table')">Event Table</div>
+</div>
+
+<div id="diagram-panel" class="panel active">
+  <div class="pagination" id="diag-pagination"></div>
+  <div id="diagram-container"></div>
+</div>
+
+<div id="table-panel" class="panel">
+  <div class="pagination" id="tbl-pagination"></div>
+  <table id="events-table">
+    <thead>
+      <tr>
+        <th>#</th><th>Timestamp</th><th>Direction</th><th>RPC</th><th>Operation ID</th><th>Payload</th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>
+  <div class="pagination" id="tbl-pagination-bottom"></div>
+</div>
+
+<script>
+const MERMAID_THEME = {
+  theme: 'base',
+  sequence: { useMaxWidth: false },
+  themeVariables: {
+    background: '#000000',
+    primaryColor: '#003010',
+    primaryTextColor: '#00ff41',
+    primaryBorderColor: '#00ff41',
+    secondaryColor: '#001a08',
+    tertiaryColor: '#000000',
+    lineColor: '#00ff41',
+    textColor: '#00ff41',
+    actorBkg: '#003010',
+    actorBorder: '#00ff41',
+    actorTextColor: '#00ff41',
+    actorLineColor: '#00aa2a',
+    signalColor: '#00ff41',
+    signalTextColor: '#00ff41',
+    labelBoxBkgColor: '#001a08',
+    labelBoxBorderColor: '#00aa2a',
+    labelTextColor: '#00ff41',
+    loopTextColor: '#00ff41',
+    noteBorderColor: '#00aa2a',
+    noteBkgColor: '#001a08',
+    noteTextColor: '#00ccff',
+    activationBorderColor: '#00ff41',
+    activationBkgColor: '#002a10',
+    sequenceNumberColor: '#000000',
+    fontFamily: 'monospace',
+  }
+};
+mermaid.initialize({ startOnLoad: false, ...MERMAID_THEME });
+
+const entries = @@ENTRIES_JSON@@;
+
+let currentFilter = '';
+let tablePage = 0;
+let diagPage = 0;
+let diagCache = {};
+
+function getFiltered() {
+  if (!currentFilter) return entries;
+  return entries.filter(e => (e.payload || {}).operation_id === currentFilter);
+}
+
+function pageSize() {
+  return parseInt(document.getElementById('page-size').value, 10);
+}
+
+// ── Table pagination ─────────────────────────────────────────────────────────
+
+function renderTable() {
+  const filtered = getFiltered();
+  const ps = pageSize();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ps));
+  if (tablePage >= totalPages) tablePage = totalPages - 1;
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+  const slice = filtered.slice(tablePage * ps, (tablePage + 1) * ps);
+  slice.forEach((e, i) => {
+    const globalIdx = tablePage * ps + i;
+    const op = (e.payload || {}).operation_id || '';
+    const tr = document.createElement('tr');
+    const dirClass = e.direction.includes('Received') ? 'dir-req' : 'dir-res';
+    const dirLabel = e.direction.includes('Received') ? '→ Request' : '← Response';
+    const payStr = e.payload ? JSON.stringify(e.payload, null, 2) : '';
+    tr.innerHTML = `
+      <td>${globalIdx + 1}</td>
+      <td>${e.timestamp}</td>
+      <td class="${dirClass}">${dirLabel}</td>
+      <td>${e.rpc.split('/').pop()}</td>
+      <td><span class="op-badge">${op ? op.substring(0,8) + '…' : '—'}</span></td>
+      <td><pre>${payStr.replace(/</g,'&lt;')}</pre></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  renderPagination('tbl-pagination', tablePage, totalPages, filtered.length, p => { tablePage = p; renderTable(); });
+  renderPagination('tbl-pagination-bottom', tablePage, totalPages, filtered.length, p => { tablePage = p; renderTable(); });
+}
+
+// ── Diagram pagination ────────────────────────────────────────────────────────
+
+function buildMermaidPage(pageEntries) {
+  const lines = ['sequenceDiagram', '    participant Client', '    participant Server'];
+  const opIndex = {};
+  pageEntries.forEach(e => {
+    const op = (e.payload || {}).operation_id || '';
+    if (op && !(op in opIndex)) opIndex[op] = Object.keys(opIndex).length;
+  });
+  pageEntries.forEach(e => {
+    const p = e.payload || {};
+    const op = p.operation_id || '';
+    const ts = e.timestamp.split(' ')[1];
+    const label = labelFor(e).replace(/"/g, "'");
+    if (e.direction.includes('Received')) {
+      lines.push(`    Client->>Server: [${ts}] ${label}`);
+    } else {
+      lines.push(`    Server-->>Client: [${ts}] ${label}`);
+    }
+    if (op) lines.push(`    Note over Client,Server: op=${op.substring(0,8)}`);
+  });
+  return lines.join('\n');
+}
+
+function labelFor(entry) {
+  const rpcShort = entry.rpc.split('/').pop();
+  const p = entry.payload || {};
+  const parts = [rpcShort];
+  if (p.plan) {
+    const plan = p.plan;
+    if (plan.command && plan.command.sql_command) {
+      const sql = plan.command.sql_command.sql || '';
+      parts.push(sql.length > 40 ? sql.substring(0,40) + '…' : sql);
+    } else if (plan.root) {
+      const node = Object.keys(plan.root).find(k => k !== 'common');
+      if (node) parts.push(node);
+    }
+  } else if (p.sql_command_result) { parts.push('sql_command_result'); }
+  else if (p.arrow_batch) { parts.push('arrow_batch rows=' + (p.arrow_batch.row_count || '?')); }
+  else if (p.result_complete !== undefined) { parts.push('result_complete'); }
+  else if (p.metrics) { parts.push('metrics'); }
+  else if (p.schema) { parts.push('schema'); }
+  else if (p.pairs && p.pairs.length) { parts.push(p.pairs[0].key + '=' + (p.pairs[0].value||'')); }
+  else if (p.release_until) { parts.push('release_until'); }
+  else if (p.release_all !== undefined) { parts.push('release_all'); }
+  return parts.join('<br/>');
+}
+
+let diagRenderCounter = 0;
+async function renderDiagram() {
+  const filtered = getFiltered();
+  const ps = pageSize();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ps));
+  if (diagPage >= totalPages) diagPage = totalPages - 1;
+
+  const container = document.getElementById('diagram-container');
+  container.innerHTML = '<div style="color:#00aa2a;padding:1rem">Rendering…</div>';
+
+  const cacheKey = currentFilter + '|' + ps + '|' + diagPage;
+  let svg;
+  if (diagCache[cacheKey]) {
+    svg = diagCache[cacheKey];
+  } else {
+    const slice = filtered.slice(diagPage * ps, (diagPage + 1) * ps);
+    const graph = buildMermaidPage(slice);
+    const id = 'mermaid-' + (++diagRenderCounter);
+    try {
+      const result = await mermaid.render(id, graph);
+      svg = result.svg;
+      diagCache[cacheKey] = svg;
+    } catch(err) {
+      svg = `<pre style="color:#ff4444">${err}</pre>`;
+    }
+  }
+
+  container.innerHTML = `<div class="mermaid-page">${svg}</div>`;
+  renderPagination('diag-pagination', diagPage, totalPages, filtered.length, p => { diagPage = p; renderDiagram(); });
+}
+
+// ── Shared pagination widget ──────────────────────────────────────────────────
+
+function renderPagination(containerId, current, total, itemCount, onPage) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const ps = pageSize();
+  const from = current * ps + 1;
+  const to = Math.min((current + 1) * ps, itemCount);
+  let html = `<span>Showing ${from}–${to} of ${itemCount}</span>`;
+  html += `<button class="page-btn" onclick="(${onPage.toString()})(0)" ${current===0?'disabled':''}>«</button>`;
+  html += `<button class="page-btn" onclick="(${onPage.toString()})(${current-1})" ${current===0?'disabled':''}>‹</button>`;
+
+  const window = 2;
+  for (let p = 0; p < total; p++) {
+    if (p === 0 || p === total-1 || Math.abs(p - current) <= window) {
+      html += `<button class="page-btn${p===current?' active':''}" onclick="(${onPage.toString()})(${p})">${p+1}</button>`;
+    } else if (Math.abs(p - current) === window + 1) {
+      html += `<span>…</span>`;
+    }
+  }
+
+  html += `<button class="page-btn" onclick="(${onPage.toString()})(${current+1})" ${current===total-1?'disabled':''}>›</button>`;
+  html += `<button class="page-btn" onclick="(${onPage.toString()})(${total-1})" ${current===total-1?'disabled':''}>»</button>`;
+  el.innerHTML = html;
+}
+
+// ── Tab / filter / page-size wiring ──────────────────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['diagram','table'][i] === name);
+  });
+  document.getElementById('diagram-panel').classList.toggle('active', name === 'diagram');
+  document.getElementById('table-panel').classList.toggle('active', name === 'table');
+  if (name === 'diagram') renderDiagram();
+}
+
+document.getElementById('op-filter').addEventListener('change', function() {
+  currentFilter = this.value;
+  tablePage = 0; diagPage = 0; diagCache = {};
+  renderTable(); renderDiagram();
+});
+
+document.getElementById('page-size').addEventListener('change', function() {
+  tablePage = 0; diagPage = 0; diagCache = {};
+  renderTable(); renderDiagram();
+});
+
+function resetFilter() {
+  document.getElementById('op-filter').value = '';
+  currentFilter = '';
+  tablePage = 0; diagPage = 0; diagCache = {};
+  renderTable(); renderDiagram();
+}
+
+// Initial render
+renderTable();
+renderDiagram();
+</script>
+</body>
+</html>
