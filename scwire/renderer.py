@@ -63,8 +63,7 @@ def build_mermaid(entries):
             lines.append(f"    Server-->>Client: [{ts}] {label}")
 
         if op_id:
-            short_op = op_id[:8]
-            lines.append(f"    Note over Client,Server: op={short_op}")
+            lines.append(f"    Note over Client,Server: op={op_id}")
 
     return "\n".join(lines)
 
@@ -76,7 +75,7 @@ def build_html(entries, log_path):
     op_ids = sorted({(e["payload"] or {}).get("operation_id", "") for e in entries if e["payload"]})
     op_ids = [o for o in op_ids if o]
     filter_options = "\n".join(
-        f'<option value="{o}">{o[:8]}… '
+        f'<option value="{o}">{o} '
         f'({sum(1 for e in entries if (e["payload"] or {}).get("operation_id") == o)} events)</option>'
         for o in op_ids
     )

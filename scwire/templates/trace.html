@@ -36,6 +36,8 @@
   .op-badge { font-size: 0.75rem; background: #003010; color: #00ff41;
                padding: 1px 5px; border-radius: 10px; font-family: monospace;
                border: 1px solid #00aa2a; }
+  .op-badge-link { cursor: pointer; }
+  .op-badge-link:hover { background: #005020; }
   pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 0.78rem;
          max-height: 200px; overflow-y: auto; background: #000; color: #00ff41; padding: 0.4rem;
          border-radius: 4px; border: 1px solid #002a10; }
@@ -69,16 +71,16 @@
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('diagram')">Sequence Diagram</div>
-  <div class="tab" onclick="switchTab('table')">Event Table</div>
+  <div class="tab" onclick="switchTab('diagram')">Sequence Diagram</div>
+  <div class="tab active" onclick="switchTab('table')">Event Table</div>
 </div>
 
-<div id="diagram-panel" class="panel active">
+<div id="diagram-panel" class="panel">
   <div class="pagination" id="diag-pagination"></div>
   <div id="diagram-container"></div>
 </div>
 
-<div id="table-panel" class="panel">
+<div id="table-panel" class="panel active">
   <div class="pagination" id="tbl-pagination"></div>
   <table id="events-table">
     <thead>
@@ -164,7 +166,7 @@ function renderTable() {
       <td>${e.timestamp}</td>
       <td class="${dirClass}">${dirLabel}</td>
       <td>${e.rpc.split('/').pop()}</td>
-      <td><span class="op-badge">${op ? op.substring(0,8) + '…' : '—'}</span></td>
+      <td><span class="op-badge${op ? ' op-badge-link' : ''}" ${op ? `onclick="setFilter('${op}')" title="Filter by this operation"` : ''}>${op || '—'}</span></td>
       <td><pre>${payStr.replace(/</g,'&lt;')}</pre></td>
     `;
     tbody.appendChild(tr);
@@ -193,7 +195,7 @@ function buildMermaidPage(pageEntries) {
     } else {
       lines.push(`    Server-->>Client: [${ts}] ${label}`);
     }
-    if (op) lines.push(`    Note over Client,Server: op=${op.substring(0,8)}`);
+    if (op) lines.push(`    Note over Client,Server: op=${op}`);
   });
   return lines.join('\n');
 }
@@ -301,6 +303,13 @@ document.getElementById('page-size').addEventListener('change', function() {
   renderTable(); renderDiagram();
 });
 
+function setFilter(op) {
+  currentFilter = op;
+  document.getElementById('op-filter').value = op;
+  tablePage = 0; diagPage = 0; diagCache = {};
+  renderTable(); renderDiagram();
+}
+
 function resetFilter() {
   document.getElementById('op-filter').value = '';
   currentFilter = '';
@@ -310,7 +319,6 @@ function resetFilter() {
 
 // Initial render
 renderTable();
-renderDiagram();
 </script>
 </body>
 </html>
