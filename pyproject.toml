@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "scwire"
 version = "0.1.0"
 description = "Parse and visualize Spark Connect LoggingInterceptor logs"
-requires-python = ">=3.9"
+requires-python = ">=3.8"
 dependencies = []
 
 [project.scripts]

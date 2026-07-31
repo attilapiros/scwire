@@ -69,8 +69,8 @@ def build_mermaid(entries):
 
 
 def build_html(entries, log_path):
-    ref = importlib.resources.files("scwire.templates").joinpath("trace.html")
-    template = ref.read_text(encoding="utf-8")
+    with importlib.resources.open_text("scwire.templates", "trace.html", encoding="utf-8") as fh:
+        template = fh.read()
 
     op_ids = sorted({(e["payload"] or {}).get("operation_id", "") for e in entries if e["payload"]})
     op_ids = [o for o in op_ids if o]
